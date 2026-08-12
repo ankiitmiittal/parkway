@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Parkway — plan your day at the park</title>
+<link rel="stylesheet" href="css/app.css?v=14">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+</head>
+<body>
+
+<div id="app"><noscript>Parkway needs JavaScript.</noscript></div>
+
+<div id="thinking" hidden>
+  <div class="thinking-box"><div class="spinner"></div><span>Working…</span></div>
+</div>
+
+<div id="toasts"></div>
+
+<!-- Classic scripts, loaded in dependency order, so this runs straight from
+     file:// with no bundler and no server.
+     ?v= is cache-busting: bump it after editing any of these, or the browser
+     will happily keep serving you the previous version. -->
+<script src="js/model.js?v=14"></script>
+<script src="js/optimizer.js?v=14"></script>
+<script src="js/questions.js?v=14"></script>
+<script src="js/duels.js?v=14"></script>
+<script src="js/vision.js?v=14"></script>
+<script src="js/waits.js?v=14"></script>
+<script src="js/ui.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
+
+<script>
+// Offline support. Service workers only run over https:// or localhost, so
+// this is simply inert when the file is opened directly — which is fine,
+// because a local file is already offline.
+if ('serviceWorker' in navigator &&
+    (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {
+      /* No offline layer. The app still works; it just needs a connection to load. */
+    });
+  });
+}
+</script>
+
+</body>
+</html>

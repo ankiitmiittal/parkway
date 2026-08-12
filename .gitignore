@@ -1,0 +1,25 @@
+# Claude Code's local permission config — machine-specific, not part of the app.
+.claude/
+
+# OS clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Only present if you ever run server/proxy.mjs locally.
+node_modules/
+
+# Never commit a key. The app keeps yours in browser localStorage and never
+# writes it to a file, so this is belt-and-braces rather than a live risk.
+.env
+.env.*
+*.key
+
+# Note: park.json is deliberately NOT ignored. If you add one it gets
+# committed and deployed, which is what makes the app open straight into the
+# questions for the people you share it with.

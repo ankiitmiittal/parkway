@@ -1,0 +1,34 @@
+# Netlify build settings, so a repo-linked deploy behaves the same as the
+# drag-and-drop one did.
+#
+# There is no build step: the app is plain HTML/CSS/JS on purpose, so Netlify
+# just publishes the repo root and picks up the function alongside it.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# A friendlier path for the queue-times proxy. The app calls the
+# /.netlify/functions/ path directly, so this is a convenience alias only.
+[[redirects]]
+  from = "/api/queue-times"
+  to = "/.netlify/functions/queue-times"
+  status = 200
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    # The service worker must never be served stale, or a release can never
+    # reach anyone: the browser would keep revalidating against a cached copy
+    # of the very file that controls caching.
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
