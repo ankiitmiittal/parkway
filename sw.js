@@ -17,7 +17,7 @@
    RELEASING A CHANGE: bump CACHE below. That is what invalidates the shell.
    ========================================================================== */
 
-var CACHE = 'parkway-v9';
+var CACHE = 'parkway-v10';
 
 // Cached without their ?v= query (lookups use ignoreSearch), so bumping the
 // asset version in index.html does not need to be mirrored here.

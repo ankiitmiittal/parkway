@@ -161,11 +161,17 @@
             '<input type="date" data-hint="date" value="' + esc(state.hints.date || '') + '"></label>',
         '</div>',
 
+        // Always put a button where the eye expects one. Hiding it when there
+        // is no API key left people staring at an uploaded map wondering what
+        // to press, so the unconfigured state is now a call to action rather
+        // than a note that is easy to skim past.
         configured
           ? btn('park:parse', '✨ Read my map', 'primary block' + (state.busy ? ' busy' : ''),
               state.busy || !u.map.length ? { disabled: 'disabled' } : {})
-          : '<div class="note warn">Add an API key in ⚙️ Settings to read your map. ' +
-            'Already have park data? Import it from Settings.</div>',
+          : btn('screen:settings', '🔑 Add a key to read this map', 'primary block'),
+        configured ? ''
+          : '<p class="muted small">Reading a map needs a Claude API key. It is stored in ' +
+            'this browser only. Already have park data? Import it from Settings.</p>',
         state.parseNotes && state.parseNotes.length
           ? '<div class="note">The model flagged these:<ul>' +
             state.parseNotes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') +
