@@ -59,7 +59,7 @@ code { font: .85em ui-monospace, SFMono-Regular, Menlo, monospace; background: v
 
 #app {
   min-height: 100dvh;
-  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
 }
 
 .top {
@@ -86,23 +86,44 @@ code { font: .85em ui-monospace, SFMono-Regular, Menlo, monospace; background: v
 }
 .card.tight { padding: .5rem; }
 
-.tabs {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, 1fr);
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  backdrop-filter: blur(14px);
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
+/* Collapsible sections. Everything past the plan lives in one of these, so
+   the page reads as a single flow rather than a set of destinations. */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: .8rem;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
-.tab {
-  appearance: none; border: 0; background: none; color: var(--muted);
-  font: inherit; font-size: .7rem; padding: .5rem 0 .55rem;
-  display: flex; flex-direction: column; align-items: center; gap: .15rem;
-  min-height: var(--tap); cursor: pointer;
+.panel > summary {
+  list-style: none; cursor: pointer;
+  padding: .95rem 1rem; min-height: var(--tap);
+  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
 }
-.tab-i { font-size: 1.15rem; line-height: 1; }
-.tab.on { color: var(--accent); }
-.tab:disabled { opacity: .32; }
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::after {
+  content: '⌄'; margin-left: auto; color: var(--muted);
+  font-size: 1.1rem; line-height: 1; transition: transform .18s;
+}
+.panel[open] > summary::after { transform: rotate(180deg); }
+.panel > summary:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.panel-t { font-weight: 650; font-size: 1rem; }
+.panel-h { font-size: .78rem; color: var(--muted); }
+.panel-body { padding: 0 .55rem .35rem; border-top: 1px solid var(--line); }
+/* Cards nested inside a panel should not double up on chrome. */
+.panel-body .card {
+  border: 0; box-shadow: none; margin-bottom: .35rem;
+  padding: .8rem .45rem; background: transparent;
+}
+.panel-body .card + .card { border-top: 1px solid var(--line); }
+.panel-body h1 { font-size: 1.05rem; }
+
+/* The single primary action. */
+.btn.big { min-height: 54px; font-size: 1.05rem; margin-top: .3rem; }
+
+#the-plan { scroll-margin-top: 64px; }
+.panel { scroll-margin-top: 64px; }
 
 /* ---------- controls ------------------------------------------------------ */
 
@@ -336,7 +357,7 @@ input:focus, select:focus, textarea:focus, .btn:focus-visible, .opt:focus-visibl
 
 #toasts {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 70;
+  bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 70;
   display: flex; flex-direction: column; gap: .4rem; width: min(92vw, 460px);
 }
 .toast {
