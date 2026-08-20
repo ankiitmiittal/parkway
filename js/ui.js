@@ -58,67 +58,110 @@
 
   /* ---------- top-level ---------------------------------------------------- */
 
+  /* One page, in the order the visitor needs it: your map, when you are there,
+     plan it, then the plan. Everything optional lives in collapsed panels
+     underneath, so nothing is lost but nothing is in the way either.
+
+     Settings is the single detour — an API key has no business on the main
+     flow — and it has its own Back control in the header. */
   UI.render = function (state) {
     var root = $('#app');
     if (!root) return;
-    var body;
-    switch (state.screen) {
-      case 'setup':     body = renderSetup(state); break;
-      case 'review':    body = renderReview(state); break;
-      case 'interview': body = renderInterview(state); break;
-      case 'plan':      body = renderPlan(state); break;
-      case 'map':       body = renderMap(state); break;
-      case 'live':      body = renderLive(state); break;
-      case 'compare':   body = renderCompare(state); break;
-      case 'waits':     body = renderWaits(state); break;
-      case 'settings':  body = renderSettings(state); break;
-      default:          body = renderSetup(state);
+    var body = state.screen === 'settings' ? renderSettings(state) : onePage(state);
+    root.innerHTML = header(state) + '<main class="screen">' + body + '</main>';
+
+    if (state.screen !== 'settings') drawRoute(state);
+
+    if (UI._resetScroll) { window.scrollTo(0, 0); UI._resetScroll = false; }
+    if (UI._scrollToPlan) {
+      UI._scrollToPlan = false;
+      var el = document.getElementById('the-plan');
+      if (el) setTimeout(function () {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
     }
-    root.innerHTML = header(state) + '<main class="screen">' + body + '</main>' + nav(state);
-    if (state.screen === 'map') drawRoute(state);
-    var scroll = root.querySelector('.screen');
-    if (scroll && UI._resetScroll) { window.scrollTo(0, 0); UI._resetScroll = false; }
   };
 
   function header(state) {
     var p = state.park;
+    var inSettings = state.screen === 'settings';
     return '<header class="top">' +
+      (inSettings ? btn('screen:setup', '←', 'icon-btn', { title: 'Back' }) : '') +
       '<div class="top-title">' +
-        '<strong>' + esc(p && p.name ? p.name : 'Parkway') + '</strong>' +
-        (p ? '<span class="top-sub">' + PP.fmtTime(state.prefs.arrive) + ' – ' +
-             PP.fmtTime(state.prefs.depart) + '</span>' : '') +
+        '<strong>' + esc(inSettings ? 'Settings'
+                         : (p && p.name ? p.name : 'Parkway')) + '</strong>' +
+        (!inSettings && p ? '<span class="top-sub">' + PP.fmtTime(state.prefs.arrive) +
+             ' – ' + PP.fmtTime(state.prefs.depart) + '</span>' : '') +
       '</div>' +
-      btn('screen:settings', '⚙️', 'icon-btn', { title: 'Settings' }) +
+      (inSettings ? '' : btn('screen:settings', '⚙️', 'icon-btn', { title: 'Settings' })) +
       '</header>';
   }
 
-  function nav(state) {
-    var hasPark = !!state.park;
-    var items = [
-      ['plan', '🗒️', 'Plan'],
-      ['map', '🗺️', 'Map'],
-      ['live', '📍', 'Live'],
-      ['interview', '❓', 'Tune'],
-      ['setup', '📷', 'Park']
-    ];
-    return '<nav class="tabs">' + items.map(function (it) {
-      var disabled = !hasPark && it[0] !== 'setup';
-      return '<button type="button" class="tab' + (state.screen === it[0] ? ' on' : '') + '"' +
-        (disabled ? ' disabled' : '') + ' data-action="screen:' + it[0] + '">' +
-        '<span class="tab-i">' + it[1] + '</span><span>' + it[2] + '</span></button>';
-    }).join('') + '</nav>';
+  /* ---------- the one page ---------------------------------------------------- */
+
+  function panel(id, title, inner, opts) {
+    opts = opts || {};
+    return '<details class="panel" id="panel-' + esc(id) + '"' +
+      (opts.open ? ' open' : '') + '>' +
+      '<summary><span class="panel-t">' + esc(title) + '</span>' +
+      (opts.hint ? '<span class="panel-h">' + esc(opts.hint) + '</span>' : '') +
+      '</summary><div class="panel-body">' + inner + '</div></details>';
   }
 
-  /* ---------- setup -------------------------------------------------------- */
+  /* Buttons inside the sections still say things like "Start the day". On one
+     page those open and scroll to the relevant panel instead of navigating,
+     so every existing affordance keeps working. */
+  UI.revealPanel = function (id) {
+    var el = document.getElementById(id === 'the-plan' ? 'the-plan' : 'panel-' + id);
+    if (!el) return false;
+    if (el.tagName === 'DETAILS') el.open = true;
+    setTimeout(function () {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 40);
+    return true;
+  };
 
-  function renderSetup(state) {
+  function onePage(state) {
+    var plan = state.plan;
+    var out = [startCard(state)];
+
+    if (state.park) {
+      out.push(panel('review', 'Check what was read', renderReview(state), {
+        hint: state.park.attractions.length + ' attractions · ' +
+              state.park.shows.length + ' shows'
+      }));
+    }
+
+    if (plan) out.push('<div id="the-plan">' + renderPlan(state) + '</div>');
+
+    if (plan && plan.ok) {
+      out.push(panel('map', 'Map', renderMap(state)));
+      out.push(panel('refine', 'Make it better', renderRefine(state), {
+        hint: 'answer questions, or compare two days',
+        open: !!state.planDuel
+      }));
+      out.push(panel('live', 'During the day', renderLive(state), {
+        hint: 'tick things off and re-plan as you go'
+      }));
+      out.push(panel('waits', 'Live queue times', renderWaits(state), {
+        hint: state.park.waitSource ? 'connected' : 'not connected'
+      }));
+    }
+
+    return out.join('');
+  }
+
+  /* The whole primary flow: what you have, when you are there, one button. */
+  function startCard(state) {
     var u = state.uploads;
     var configured = PP.vision.configured();
+    var hasMap = u.map.length > 0;
+    var hasPark = !!state.park;
+    var pr = state.prefs;
 
     var thumbs = function (list, bucket) {
       if (!list.length) return '';
       return '<div class="thumbs">' + list.map(function (f, i) {
-        // A PDF has no bitmap to preview, so show the filename instead.
         var inner = f.kind === 'pdf'
           ? '<span class="thumb-pdf"><b>PDF</b>' +
             (f.sizeBytes ? '<em>' + Math.max(1, Math.round(f.sizeBytes / 102400) / 10) + ' MB</em>' : '') +
@@ -130,68 +173,74 @@
       }).join('') + '</div>';
     };
 
+    // One button, and it always does the sensible next thing.
+    var cta;
+    if (!configured && !hasPark) {
+      cta = btn('screen:settings', '🔑 Add a key to read your map', 'primary block big');
+    } else {
+      cta = btn('day:plan', hasPark ? '🗓️ Re-plan my day' : '🗓️ Plan my day',
+        'primary block big' + (state.busy ? ' busy' : ''),
+        (state.busy || (!hasPark && !hasMap)) ? { disabled: 'disabled' } : {});
+    }
+
     return [
       '<section class="card">',
-        '<h1>Set up your park</h1>',
-        '<p class="muted">Photograph the map and the showtimes board as you walk in. ',
-        'Reading the photos needs a connection; the routing, the questions and ',
-        're-planning all run on your phone afterwards.</p>',
-      '</section>',
+        hasPark ? '' : '<h1>Plan your day at the park</h1>',
+        hasPark ? '' : '<p class="muted">Add the park map, say when you are there, and ' +
+          'get a route built around the showtimes and the queues.</p>',
 
-      '<section class="card">',
-        '<h2>1 · Map &amp; showtimes</h2>',
         '<label class="drop" for="file-map">',
           '<span class="drop-i">🗺️</span>',
-          '<span><strong>Park map</strong><br><span class="muted">Take a photo, choose one from your gallery, or pick a PDF. Required — sets the coordinates everything else is placed on.</span></span>',
+          '<span><strong>Park map</strong><br><span class="muted">Take a photo, choose one ' +
+          'from your gallery, or pick a PDF</span></span>',
         '</label>',
         '<input type="file" id="file-map" accept="image/*,application/pdf,.pdf" multiple hidden>',
         thumbs(u.map, 'map'),
 
         '<label class="drop" for="file-board">',
           '<span class="drop-i">🕐</span>',
-          '<span><strong>Showtimes board</strong><br><span class="muted">Photo, gallery image or PDF. Optional, but this is what makes the timing work.</span></span>',
+          '<span><strong>Showtimes board</strong><br><span class="muted">Optional — but it is ' +
+          'what makes the timing work</span></span>',
         '</label>',
         '<input type="file" id="file-board" accept="image/*,application/pdf,.pdf" multiple hidden>',
         thumbs(u.board, 'board'),
 
         '<div class="row gap">',
-          '<label class="field"><span>Park name</span>',
-            '<input type="text" data-hint="name" value="' + esc(state.hints.name || '') + '" placeholder="Optional"></label>',
           '<label class="field"><span>Date</span>',
             '<input type="date" data-hint="date" value="' + esc(state.hints.date || '') + '"></label>',
+          '<label class="field"><span>Arriving</span>',
+            '<input type="time" data-pref="arrive" value="' + hhmm(pr.arrive) + '"></label>',
+          '<label class="field"><span>Leaving</span>',
+            '<input type="time" data-pref="depart" value="' + hhmm(pr.depart) + '"></label>',
         '</div>',
 
-        // Always put a button where the eye expects one. Hiding it when there
-        // is no API key left people staring at an uploaded map wondering what
-        // to press, so the unconfigured state is now a call to action rather
-        // than a note that is easy to skim past.
-        configured
-          ? btn('park:parse', '✨ Read my map', 'primary block' + (state.busy ? ' busy' : ''),
-              state.busy || !u.map.length ? { disabled: 'disabled' } : {})
-          : btn('screen:settings', '🔑 Add a key to read this map', 'primary block'),
-        configured ? ''
-          : '<p class="muted small">Reading a map needs a Claude API key. It is stored in ' +
-            'this browser only. Already have park data? Import it from Settings.</p>',
+        cta,
+
+        (!configured && !hasPark)
+          ? '<p class="muted small">Reading a map needs a Claude API key. It is stored in this ' +
+            'browser only. Already have park data? Import it from Settings.</p>'
+          : '',
+
         state.parseNotes && state.parseNotes.length
           ? '<div class="note">The model flagged these:<ul>' +
             state.parseNotes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') +
             '</ul></div>'
           : '',
-      '</section>',
-
-      state.park ? '<section class="card">' +
-        '<h2>Current park</h2>' +
-        '<p>' + esc(state.park.name) + ' — ' + state.park.attractions.length + ' attractions, ' +
-        state.park.shows.length + ' shows, ' + state.park.food.length + ' places to eat.</p>' +
-        '<div class="stack">' +
-          btn('screen:review', '📝 Review & correct the details', 'block') +
-          btn('screen:waits', '🟢 Connect live queue times', 'block') +
-          btn('park:export', '💾 Export this park as JSON', 'block') +
-        '</div></section>' : ''
+        imageVerdictCard(state),
+      '</section>'
     ].join('');
   }
 
-  /* ---------- review ------------------------------------------------------- */
+  /* Questions and comparisons, side by side in one panel. */
+  function renderRefine(state) {
+    if (state.planDuel) return renderCompare(state);
+    return renderInterview(state) +
+      '<section class="card">' +
+        btn('compare:build', '⚖️ Compare two versions of this day', 'block') +
+      '</section>';
+  }
+
+  /* ---------- setup -------------------------------------------------------- */
 
   function renderReview(state) {
     var p = state.park;
@@ -260,7 +309,7 @@
         '<div class="stack">',
           btn('item:add:attraction', '➕ Add an attraction', 'block'),
           btn('item:add:show', '➕ Add a show', 'block'),
-          btn('screen:interview', 'Looks right — continue →', 'primary block'),
+          btn('day:plan', 'Apply and re-plan', 'primary block'),
         '</div>',
       '</section>'
     ].join('');

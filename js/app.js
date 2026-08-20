@@ -20,7 +20,7 @@
       uploads: { map: [], board: [] },
       hints: { name: '', date: new Date().toISOString().slice(0, 10) },
       plan: null,
-      screen: 'setup',
+      screen: 'page',
       imageVerdicts: null,
       currentQuestion: null,
       currentDuel: null,
@@ -79,8 +79,9 @@
         s.progress = restored.progress;
         s.hints = raw.hints || s.hints;
         s.duels = raw.duels && raw.duels.w ? raw.duels : PP.duels.blank();
-        s.screen = raw.screen && ['settings', 'waits', 'compare'].indexOf(raw.screen) < 0
-          ? raw.screen : 'plan';
+        s.screen = 'page';   // one page; Settings is never restored into
+
+
       } catch (e) { /* fall back to a blank slate */ }
     }
     return s;
@@ -178,14 +179,40 @@
   var actions = {
 
     /* navigation */
-    'screen:setup':     function () { go('setup'); },
-    'screen:review':    function () { go('review'); },
-    'screen:plan':      function () { if (!state.plan) rebuild(); go('plan'); },
-    'screen:map':       function () { go('map'); },
-    'screen:live':      function () { go('live'); },
+    /* On one page these reveal a section rather than navigate. Settings is the
+       exception — a genuine detour, not part of the flow. */
     'screen:settings':  function () { state.testResult = null; go('settings'); },
-    'screen:waits':     function () { go('waits'); },
-    'screen:compare':   function () { go('compare'); },
+    'screen:setup':     function () { backToPage(); window.scrollTo(0, 0); },
+    'screen:plan':      function () { if (!state.plan) refresh(); reveal('the-plan'); },
+    'screen:review':    function () { reveal('review'); },
+    'screen:map':       function () { reveal('map'); },
+    'screen:live':      function () { reveal('live'); },
+    'screen:waits':     function () { reveal('waits'); },
+    'screen:compare':   function () { reveal('refine'); },
+
+    /* The one button on the page. Always does the sensible next thing. */
+    'day:plan': function () {
+      if (state.busy) return;
+
+      if (!state.park) {
+        if (!PP.vision.configured()) {
+          PP.ui.toast('Add an API key first.', 'warn');
+          go('settings');
+          return;
+        }
+        if (!state.uploads.map.length) {
+          PP.ui.toast('Add your park map first.', 'warn');
+          return;
+        }
+        actions['park:parse']();      // parses, then plans, then scrolls
+        return;
+      }
+
+      rebuild(600);
+      save();
+      PP.ui._scrollToPlan = true;
+      render();
+    },
 
     /* A/B comparisons ---------------------------------------------------- */
 
@@ -238,7 +265,7 @@
           }
           state.planDuel = pd;
           state.lastAxes = [pd.a.axis.id, pd.b.axis.id];
-          go('compare');
+          reveal('refine');
         } catch (e) {
           hideThinking();
           PP.ui.toast('Could not build the comparison: ' + e.message, 'warn');
@@ -251,7 +278,7 @@
       state.planDuel = null;
       rebuild(600);
       save();
-      go('plan');
+      PP.ui._scrollToPlan = true; render();
       PP.ui.toast(axis ? 'Applied: ' + axis.label.toLowerCase() + '.' : 'Applied.');
     },
 
@@ -279,7 +306,7 @@
 
     'waits:refresh': function () {
       var src = state.park.waitSource;
-      if (!src) { go('waits'); return; }
+      if (!src) { reveal('waits'); return; }
       if (src.provider === 'web') { webWaits(); return; }
       syncWaits(src.parkId, src.parkName);
     },
@@ -293,19 +320,24 @@
 
     'waits:web': function () { webWaits(); },
     'screen:interview': function () {
-      go('interview');
-      if (!state.currentQuestion) advanceQuestion();
+      reveal('refine');
+      if (!state.currentQuestion && !state.currentDuel) advanceQuestion();
     },
 
     /* park sources */
     'park:sample': function () {
       state.park = PP.samplePark();
-      state.prefs = PP.newPrefs({ arrive: state.park.openTime, depart: 17 * 60 });
+      state.prefs.arrive = PP.clamp(state.prefs.arrive,
+                                    state.park.openTime, state.park.closeTime);
+      state.prefs.depart = PP.clamp(state.prefs.depart,
+                                    state.prefs.arrive + 30, state.park.closeTime);
       state.answered = {};
       state.progress = { done: [], skipped: [], observedWaits: {} };
-      rebuild();
-      go('interview');
-      advanceQuestion();
+      rebuild(600);
+      save();
+      backToPage();
+      PP.ui._scrollToPlan = true;
+      render();
       PP.ui.toast('Sample park loaded.');
     },
 
@@ -315,7 +347,8 @@
         id: PP.uid('f'), name: 'Food court', kind: 'food',
         x: 0.5, y: 0.8, zone: '', durationMin: 40, typicalWaitMin: 10, tags: ['food']
       });
-      go('review');
+      backToPage();
+      reveal('review');
     },
 
     'park:parse': function () {
@@ -330,16 +363,20 @@
           state.park = res.park;
           state.parseNotes = res.notes;
           state.imageVerdicts = res.gated || null;
-          state.prefs = PP.newPrefs({
-            arrive: Math.max(res.park.openTime, PP.nowMinutes()),
-            depart: res.park.closeTime
-          });
+          // Keep the times they typed above the button; only pull them inside
+          // the park's actual opening hours.
+          state.prefs.arrive = PP.clamp(state.prefs.arrive,
+                                        res.park.openTime, res.park.closeTime);
+          state.prefs.depart = PP.clamp(state.prefs.depart,
+                                        state.prefs.arrive + 30, res.park.closeTime);
           state.answered = {};
           state.progress = { done: [], skipped: [], observedWaits: {} };
           state.busy = false;
           hideThinking();
+          rebuild(600);                 // straight to a plan, no second tap
           save();
-          go('review');
+          PP.ui._scrollToPlan = true;
+          render();
           PP.ui.toast('Read ' + res.park.attractions.length + ' attractions and ' +
             res.park.shows.length + ' shows.');
           tryAutoConnectWaits();
@@ -560,6 +597,22 @@
     render();
   }
 
+  // Come back from Settings to the single page.
+  function backToPage() {
+    if (state.screen === 'settings') { state.screen = 'page'; save(); render(); }
+  }
+
+  /* Reveal a section of the one page. If we are in Settings, come back first
+     and let the re-render finish before scrolling to it. */
+  function reveal(id) {
+    if (state.screen === 'settings') {
+      backToPage();
+      setTimeout(function () { PP.ui.revealPanel(id); }, 50);
+      return;
+    }
+    PP.ui.revealPanel(id);
+  }
+
   /* Try to hook up live queue times without being asked. Only commits on a
      confident park-name match AND a decent ride-match rate — auto-connecting
      the wrong park would be worse than connecting nothing, so it backs out
@@ -582,7 +635,7 @@
         });
         rebuild();
         save();
-        go('interview');
+        reveal('refine');
         advanceQuestion();
         tryAutoConnectWaits();
       })
@@ -759,7 +812,7 @@
             state.answered = restored.answered;
             state.progress = restored.progress;
             rebuild();
-            go('review');
+            reveal('review');
             PP.ui.toast('Imported ' + state.park.name + '.');
             tryAutoConnectWaits();
           } catch (err) {
