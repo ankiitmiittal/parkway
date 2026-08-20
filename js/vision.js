@@ -41,9 +41,30 @@
     return s;
   };
 
+  // The site's own key, served by netlify/functions/claude.js. Only exists
+  // when the app is hosted; opening index.html from a file has no server.
+  var SITE_PROXY = '/.netlify/functions/claude';
+
+  V.siteProxyAvailable = function () {
+    return location.protocol === 'http:' || location.protocol === 'https:';
+  };
+
+  /* Hosted, the site's own key covers everyone, so nobody has to bring one.
+     A personal key in Settings still wins if it is set — useful for testing
+     against your own account, and the only option from file://. */
   V.configured = function () {
     var s = V.settings();
-    return s.transport === 'proxy' ? !!s.proxyUrl : !!s.apiKey;
+    if (s.transport === 'proxy') return !!s.proxyUrl;
+    if (s.apiKey) return true;
+    return V.siteProxyAvailable();
+  };
+
+  // Which of the three routes a request will actually take.
+  V.route = function () {
+    var s = V.settings();
+    if (s.transport === 'proxy') return 'your proxy';
+    if (s.apiKey) return 'your own key';
+    return V.siteProxyAvailable() ? "this site's key" : 'not configured';
   };
 
   /* ---------- image handling ---------------------------------------------- */
@@ -68,6 +89,10 @@
      which strips EXIF and GPS as a side effect. A PDF is forwarded byte for
      byte, so any metadata its author embedded (producing software, title,
      sometimes an author name) goes with it. */
+  // A 50-page visitor guide is mostly marketing, and every page is billed as
+  // an image. Worth telling people before they send one.
+  V.BROCHURE_HINT_BYTES = 2 * 1024 * 1024;
+
   V.readPdf = function (file) {
     return new Promise(function (resolve, reject) {
       if (file.size > MAX_PDF_BYTES) {
@@ -290,13 +315,19 @@
 
     if (s.transport === 'proxy') {
       url = s.proxyUrl;
-    } else {
-      if (!s.apiKey) return Promise.reject(new Error('No API key set. Open Settings and add one, or switch to a proxy.'));
+    } else if (s.apiKey) {
       url = API_URL;
       headers['x-api-key'] = s.apiKey;
       headers['anthropic-version'] = API_VERSION;
       // Required for calls made straight from a browser.
       headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    } else if (V.siteProxyAvailable()) {
+      // No personal key, but we are hosted: use the site's own key. Same
+      // origin, so no CORS and no key ever reaches the browser.
+      url = SITE_PROXY;
+    } else {
+      return Promise.reject(new Error(
+        'No API key set. Open Settings and add one — a local file has no server to borrow a key from.'));
     }
 
     return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body) })

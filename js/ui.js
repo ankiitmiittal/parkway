@@ -221,6 +221,15 @@
             'browser only. Already have park data? Import it from Settings.</p>'
           : '',
 
+        // A whole visitor guide costs a page of tokens per page of brochure.
+        u.map.concat(u.board).some(function (f) {
+          return f.kind === 'pdf' && f.sizeBytes > PP.vision.BROCHURE_HINT_BYTES;
+        })
+          ? '<div class="note warn">That looks like a full visitor guide rather than just ' +
+            'a map. Every page gets read, so it is slower and costs more. If you can, use ' +
+            'only the map pages — or photograph the map spread instead.</div>'
+          : '',
+
         state.parseNotes && state.parseNotes.length
           ? '<div class="note">The model flagged these:<ul>' +
             state.parseNotes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') +
@@ -952,6 +961,11 @@
     return [
       '<section class="card">',
         '<h1>Settings</h1>',
+        '<div class="note">Currently reading maps with: <strong>' +
+          esc(PP.vision.route()) + '</strong>.' +
+          (PP.vision.route() === "this site's key"
+            ? ' Nobody needs their own key on this site — leave the box below empty.'
+            : '') + '</div>',
         '<label class="field"><span>How to reach Claude</span>',
           '<select data-setting="transport">',
             '<option value="direct"' + (s.transport === 'direct' ? ' selected' : '') + '>Direct from this browser</option>',
