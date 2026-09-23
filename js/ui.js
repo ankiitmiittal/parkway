@@ -175,7 +175,11 @@
 
     // One button, and it always does the sensible next thing.
     var cta;
-    if (!configured && !hasPark) {
+    if (state.siteKeyMissing && !hasPark) {
+      // Hosted, but this site has no key of its own. Say so before anyone
+      // uploads a map and waits, rather than failing at the end.
+      cta = btn('screen:settings', '🔑 Add a key to read your map', 'primary block big');
+    } else if (!configured && !hasPark) {
       cta = btn('screen:settings', '🔑 Add a key to read your map', 'primary block big');
     } else {
       cta = btn('day:plan', hasPark ? '🗓️ Re-plan my day' : '🗓️ Plan my day',
@@ -186,6 +190,12 @@
     return [
       '<section class="card">',
         hasPark ? '' : '<h1>Plan your day at the park</h1>',
+        state.siteKeyMissing && !hasPark
+          ? '<div class="note warn">This site cannot read maps yet — it has no Claude API ' +
+            'key of its own. If it is your site, add <code>ANTHROPIC_API_KEY</code> in ' +
+            'Netlify under Site configuration → Environment variables and redeploy. ' +
+            'Otherwise add your own key in Settings.</div>'
+          : '',
         hasPark ? '' : '<p class="muted">Add the park map, say when you are there, and ' +
           'get a route built around the showtimes and the queues.</p>',
 

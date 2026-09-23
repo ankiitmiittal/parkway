@@ -22,6 +22,7 @@
       plan: null,
       screen: 'page',
       imageVerdicts: null,
+      siteKeyMissing: false,   // set by the boot probe in netlify/functions/claude.js
       currentQuestion: null,
       currentDuel: null,
       planDuel: null,
@@ -846,6 +847,15 @@
     wireFiles();
     render();
     tryBundledPark();
+
+    // Find out up front whether this site can read a map at all, so the
+    // answer arrives before someone picks a file rather than after.
+    PP.vision.checkSiteKey().then(function (ok) {
+      if (ok === false && !state.siteKeyMissing) {
+        state.siteKeyMissing = true;
+        render();
+      }
+    });
 
     // Keep the Live screen honest as the clock moves.
     setInterval(function () {

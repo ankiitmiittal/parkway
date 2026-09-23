@@ -49,6 +49,14 @@ function rateLimited(ip) {
 
 exports.handler = async function (event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors(), body: '' };
+
+  /* Health check. Lets the app find out on load whether this site can read
+     maps at all, instead of letting someone upload a 5 MB PDF, wait, and only
+     then be told the site has no key. Reports nothing about the key itself. */
+  if (event.httpMethod === 'GET') {
+    return json(200, { ok: true, keyConfigured: !!process.env.ANTHROPIC_API_KEY });
+  }
+
   if (event.httpMethod !== 'POST') return json(405, { error: { message: 'POST only' } });
 
   const key = process.env.ANTHROPIC_API_KEY;

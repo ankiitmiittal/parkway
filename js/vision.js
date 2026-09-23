@@ -59,6 +59,26 @@
     return V.siteProxyAvailable();
   };
 
+  /* Ask the site whether it actually has a key, once per load. Without this
+     the app looks ready, accepts an upload, spends the wait, and only then
+     reports that the site was never configured. Resolves to null when the
+     question does not apply (a personal key is set, or we are on file://). */
+  var siteKeyProbe = null;
+  V.checkSiteKey = function () {
+    if (siteKeyProbe) return siteKeyProbe;
+    if (V.settings().apiKey || !V.siteProxyAvailable()) {
+      siteKeyProbe = Promise.resolve(null);
+      return siteKeyProbe;
+    }
+    siteKeyProbe = fetch(SITE_PROXY, { method: 'GET', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { return !!(d && d.keyConfigured); })
+      // A missing function is indistinguishable from a missing key as far as
+      // the visitor is concerned: either way this site cannot read a map.
+      .catch(function () { return false; });
+    return siteKeyProbe;
+  };
+
   // Which of the three routes a request will actually take.
   V.route = function () {
     var s = V.settings();
