@@ -329,9 +329,30 @@
     return body;
   }
 
+  /* HTTP status alone tells someone nothing about what to do next, and the
+     commonest failure by far is a key that was mistyped or partly pasted. */
+  function explainStatus(status, upstreamMsg, ownKey) {
+    if (status === 401) {
+      return ownKey
+        ? 'That API key was rejected. Check it copied in full — a truncated paste or a ' +
+          'stray space is the usual cause — then use "Test the connection" in Settings.'
+        : 'This site\'s API key was rejected. If it is your site, check ANTHROPIC_API_KEY ' +
+          'in Netlify is the whole key, then redeploy.';
+    }
+    if (status === 403) return 'That key is not allowed to use this model. Check the key\'s permissions.';
+    if (status === 429) return 'Too many requests in a row. Wait a minute and try again.';
+    if (status === 413) return 'That is too large to send. Use fewer pages, or a photo of just the map.';
+    if (status === 400 && /credit|balance|billing/i.test(upstreamMsg || '')) {
+      return 'The account behind this key has no credit left.';
+    }
+    if (status >= 500) return 'The API is having trouble right now. Try again shortly.';
+    return 'API error ' + status + ': ' + upstreamMsg;
+  }
+
   function send(body) {
     var s = V.settings();
     var url, headers = { 'content-type': 'application/json' };
+    var usingOwnKey = s.transport !== 'proxy' && !!s.apiKey;
 
     if (s.transport === 'proxy') {
       url = s.proxyUrl;
@@ -358,19 +379,21 @@
           if (!res.ok) {
             var msg = (data && data.error && data.error.message) || text.slice(0, 300) ||
                       ('HTTP ' + res.status);
-            throw new Error('API error ' + res.status + ': ' + msg);
+            throw new Error(explainStatus(res.status, msg, usingOwnKey));
           }
           return data;
         });
       })
       .catch(function (err) {
         if (err instanceof TypeError) {
-          // fetch() rejects with TypeError on network/CORS failure.
-          throw new Error(
-            'Could not reach the API. If you opened this file directly, your browser may be ' +
-            'blocking the cross-origin request — run the bundled proxy (see README) and switch ' +
-            'Settings to Proxy mode.'
-          );
+          // fetch() rejects with TypeError on network or CORS failure, which
+          // means the request never got an answer — quite different from an
+          // answer we did not like.
+          throw new Error(V.siteProxyAvailable()
+            ? 'Could not reach the API. Check your connection and try again.'
+            : 'Could not reach the API. Opening this file directly blocks the request — ' +
+              'put the app on a web address, or run the bundled proxy and switch Settings ' +
+              'to Proxy mode.');
         }
         throw err;
       });
